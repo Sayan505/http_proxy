@@ -1,0 +1,6 @@
+# objs
+*.o
+
+# build dir
+/build/
+
