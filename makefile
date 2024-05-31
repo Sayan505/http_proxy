@@ -42,6 +42,7 @@ CCFLAGS_DEBUG   := -O$(OPT_DBG)             \
                    -pedantic-errors         \
                    -pipe                    \
 				   -pthread                 \
+				   -lrt                     \
                    -g3
 
 CCFLAGS_RELEASE := -O$(OPT_REL)             \
@@ -51,7 +52,8 @@ CCFLAGS_RELEASE := -O$(OPT_REL)             \
                    -pedantic                \
                    -pedantic-errors         \
                    -pipe                    \
-				   -pthread
+				   -pthread                 \
+				   -lrt
 
 LDFLAGS_DEBUG   := -O$(OPT_DBG)
 
