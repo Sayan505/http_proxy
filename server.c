@@ -95,6 +95,8 @@ void client_handler(int client_socket_fd) {
         handle_http_get_req(client_socket_fd, client_req_buffer, client_req_nbytes);
     }else {
         printf("    ERR: unsupported method\n");
+        const char* msg = "HTTP/1.1 501 Not Implemented\r\nContent-Length: 41\r\nContent-Type: text/html\r\n\r\n<html><h1>501 Not Implemented</h1></html>";
+        send(client_socket_fd, msg, strlen(msg), 0);
     }
 
 
