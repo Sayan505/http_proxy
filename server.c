@@ -62,14 +62,13 @@ void handle_http_get_req(int client_socket_fd, char* client_req, ssize_t client_
 
 
     // forward client's req to the target
-    write(target_socket_fd, client_req, client_req_nbytes);
-
+    send(target_socket_fd, client_req, client_req_nbytes, 0);
 
 
     int nbytes;  // recv n bytes from target
-    while((nbytes = read(target_socket_fd, target_res_buffer, MAX_BUFF_SZ)) > 0) {
-        write(client_socket_fd, target_res_buffer, nbytes);  // send it to the client
-        memset(target_res_buffer, 0, MAX_BUFF_SZ);           // reset buffer for next packet
+    while((nbytes = recv(target_socket_fd, target_res_buffer, MAX_BUFF_SZ, 0)) > 0) {
+        send(client_socket_fd, target_res_buffer, nbytes, 0);  // send it to the client
+        memset(target_res_buffer, 0, MAX_BUFF_SZ);             // reset buffer for next packet
     }
 
     // close connection to target
@@ -86,7 +85,7 @@ void client_handler(int client_socket_fd) {
 
 
     // recv client's req
-    ssize_t client_req_nbytes = read(client_socket_fd, client_req_buffer, MAX_BUFF_SZ);
+    ssize_t client_req_nbytes = recv(client_socket_fd, client_req_buffer, MAX_BUFF_SZ, 0);
 
 
     // parse client's req to find the HTTP Method
@@ -94,12 +93,7 @@ void client_handler(int client_socket_fd) {
         // HTTP GET Method
         printf("    method: [GET]\n");
         handle_http_get_req(client_socket_fd, client_req_buffer, client_req_nbytes);
-    } else if(strncmp(client_req_buffer, "CONNECT", 7) == 0) {
-        // HTTPS
-        // create tunnel to transmit
-        // WIP
-        printf("    ERR: HTTPS CONNECT method is not implemented yet\n");
-    } else {
+    }else {
         printf("    ERR: unsupported method\n");
     }
 
