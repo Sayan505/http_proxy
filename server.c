@@ -1,64 +1,172 @@
 #include "server.h"
 
-void handle_client_conn(int client_socket) {
-    char buffer[4096];
-    memset(&buffer, 0, sizeof(buffer));
 
-    // read client req
-    size_t bytes_read = read(client_socket, buffer, sizeof(buffer));
-    buffer[bytes_read] = '\0';
+void handle_http_get_req(int client_socket_fd, char* client_req, ssize_t client_req_nbytes) {
+    // parse client's req for the "Host:" field
+    char* client_req_host_base   = strstr(client_req, "Host:") + 6;
+    int   client_req_host_nbytes = strstr(client_req_host_base, "\r\n") - client_req_host_base;
+    char* client_req_host        = malloc(client_req_host_nbytes + 1);  // alloc mem to store the "Host:" value
+    memset(client_req_host, 0, client_req_host_nbytes + 1);
+    strncpy(client_req_host, client_req_host_base, client_req_host_nbytes);
 
-    //printf("%s", buffer);
+    printf("    url:    [%s]\n", client_req_host);
 
-    write(client_socket, "http://www.google.com/", 23);
-    close(client_socket);
+
+    // get target host addr from name
+    struct addrinfo hints;
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_flags    = AI_CANONNAME;
+    hints.ai_family   = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_protocol = IPPROTO_TCP;
+    struct addrinfo* target_host_addrinfo = NULL;
+
+    if(getaddrinfo(client_req_host, NULL, &hints, &target_host_addrinfo) != 0) {
+        printf("ERR: failed to lookup target host\n");
+        free(client_req_host);
+        return;
+    }
+
+    // free up buffer for Host value after use
+    free(client_req_host);
+
+
+    // create socket for the target connection
+    int target_socket_fd = socket(AF_INET, SOCK_STREAM, 0);
+    if(target_socket_fd == -1) {
+        printf("ERR: failed to create target socket\n");
+        return;
+    }
+
+    // create new socket addr for the target
+    struct sockaddr_in target_socket_addr;
+    target_socket_addr.sin_family      = AF_INET;
+    target_socket_addr.sin_port        = htons(80);
+    target_socket_addr.sin_addr.s_addr = ((struct sockaddr_in*)target_host_addrinfo->ai_addr)->sin_addr.s_addr;
+
+
+    // connect to target
+    if(connect(target_socket_fd, (struct sockaddr*)&target_socket_addr, sizeof(target_socket_addr)) == -1) {
+        printf("    ERR: failed to connect to target\n");
+        return;
+    } else {
+        printf("    OK: connected to the target @ [%s]\n", inet_ntoa(((struct sockaddr_in*)target_host_addrinfo->ai_addr)->sin_addr));
+    }
+
+    freeaddrinfo(target_host_addrinfo);
+
+
+    // alloc response buffer
+    char* target_res_buffer = malloc(MAX_BUFF_SZ);
+    memset(target_res_buffer, 0, MAX_BUFF_SZ);
+
+
+    // forward client's req to the target
+    write(target_socket_fd, client_req, client_req_nbytes);
+
+
+
+    int nbytes;  // recv n bytes from target
+    while((nbytes = read(target_socket_fd, target_res_buffer, MAX_BUFF_SZ)) > 0) {
+        write(client_socket_fd, target_res_buffer, nbytes);  // send it to the client
+        memset(target_res_buffer, 0, MAX_BUFF_SZ);           // reset buffer for next packet
+    }
+
+    // close connection to target
+    close(target_socket_fd);
+
+    // free up response buffer
+    free(target_res_buffer);
 }
+
+void client_handler(int client_socket_fd) {
+    // alloc buffer to receive client's req
+    char* client_req_buffer = malloc(MAX_BUFF_SZ);
+    memset(client_req_buffer, 0, MAX_BUFF_SZ);
+
+
+    // recv client's req
+    ssize_t client_req_nbytes = read(client_socket_fd, client_req_buffer, MAX_BUFF_SZ);
+
+
+    // parse client's req to find the HTTP Method
+    if(strncmp(client_req_buffer, "GET", 3) == 0) {
+        // HTTP GET Method
+        printf("    method: [GET]\n");
+        handle_http_get_req(client_socket_fd, client_req_buffer, client_req_nbytes);
+    } else if(strncmp(client_req_buffer, "CONNECT", 7) == 0) {
+        // HTTPS
+        // create tunnel to transmit
+        // WIP
+        printf("    ERR: HTTPS CONNECT method is not implemented yet\n");
+    } else {
+        printf("    ERR: unsupported method\n");
+    }
+
+
+    // free up client req buffer
+    free(client_req_buffer);
+}
+
+
 int main() {
-    int socket_endp = socket(AF_INET, SOCK_STREAM, 0);
-    if(socket_endp == -1) {
-        printf("ERR SOCK\n");
+    // create new socket for server
+    int server_socket_fd = socket(AF_INET, SOCK_STREAM, 0);
+    if(server_socket_fd == -1) {
+        printf("ERR: failed to create server socket\n");
         return 1;
     }
 
-    struct sockaddr_in server_addr;
-    memset(&server_addr, 0, sizeof(server_addr));
-    server_addr.sin_family      = AF_INET;
-    server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    server_addr.sin_port        = htons(SRV_PORT);
 
-    if(bind(socket_endp, (struct sockaddr*)&server_addr, sizeof(server_addr)) == -1) {
-        printf("ERR BIND\n");
+    // create new socket addr for server
+    struct sockaddr_in server_socket_addr;
+    memset(&server_socket_addr, 0, sizeof(server_socket_addr));
+
+    server_socket_addr.sin_family      = AF_INET;
+    server_socket_addr.sin_port        = htons(SRV_PORT);    // listening port
+    server_socket_addr.sin_addr.s_addr = htonl(INADDR_ANY);  // accept conn from any addr
+
+
+    // bind the server socket with the addr
+    if(bind(server_socket_fd, (struct sockaddr*)&server_socket_addr, sizeof(server_socket_addr)) == -1) {
+        printf("ERR: failed to bind server socket to address\n");
         return 1;
     }
 
-    if(listen(socket_endp, MAX_CLIENTS) == -1) {
-        printf("ERR LISTEN\n");
+
+    // start listening for incoming connections
+    if(listen(server_socket_fd, MAX_CLIENTS) == -1) {
+        printf("ERR: failed listen on server socket\n");
+        return 1;
     }
 
-    printf("listening\n");
+    printf("OK: server is listening for incoming connections @ port %d\n", SRV_PORT);
 
-    // accept loop
-    for(;;) {
-        printf("meow\n");
-        struct sockaddr_in client_addr;
-        memset(&client_addr, 0, sizeof(client_addr));
-        socklen_t client_addr_len = sizeof(client_addr);
 
-        int client_socket = accept(socket_endp, (struct sockaddr*)&client_addr, &client_addr_len);
-        if(client_socket == -1) {
-            printf("ERR CLIENT SOCK\n");
-            continue;
+    // keep trying to accept incoming connections
+    while(1) {
+        struct sockaddr_in client_sock_addr;
+        socklen_t c = sizeof(client_sock_addr);
+
+        int client_socket_fd = accept(server_socket_fd, (struct sockaddr*)&client_sock_addr, &c);
+        if(client_socket_fd == -1) {
+            printf("ERR: failed to accept an incoming connection\n");
+            continue;  // try for next req on failure
         }
-        printf("ACCEPT: %d", client_socket);
 
-        handle_client_conn(client_socket);
-        close(socket_endp);
-        break;
+
+        // serve client
+        printf("OK: connection accepted from [%s]\n", inet_ntoa(client_sock_addr.sin_addr));
+        client_handler(client_socket_fd);
+
+
+        // clean up client side
+        close(client_socket_fd);
     }
 
 
-    close(socket_endp);
-    printf("closed\n");
+    // clean up server side
+    close(server_socket_fd);
 
     return 0;
 }

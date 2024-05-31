@@ -6,7 +6,6 @@
 
 # toolchain:
 CC := gcc
-AS := nasm
 LD := gcc
 
 
@@ -25,48 +24,40 @@ BUILDDIR_DEBUGDIR   := $(BUILDDIR)/debug
 
 
 # srcs:
-SRCDIR  := ./
-SRC_C   := $(shell find $(SRCDIR)/ -type d \( -path ./tests \) -prune -false -o -name '*.c')
-SRC_ASM := $(shell find $(SRCDIR)/ -type d \( -path ./tests \) -prune -false -o -name '*.asm')
+SRCDIR := ./
+SRC_C  := $(shell find $(SRCDIR)/ -type d \( -path ./tests \) -prune -false -o -name '*.c')
 
 
 # objs:
-OBJS := ${SRC_C:.c=.o} ${SRC_ASM:.asm=.o}
+OBJS := ${SRC_C:.c=.o}
 
 
 # toolchain flags:
-CCFLAGS_DEBUG   := -O$(OPT_DBG)              \
-                    -std=c23                 \
-                    -Wall                    \
-                    -Wextra                  \
-                    -Wpadded                 \
-                    -pedantic                \
-                    -pedantic-errors         \
-                    -pipe                    \
-					-pthread                 \
-                    -g3                      \
-                    -fno-pic                 \
-                    -I$(SRCDIR)/inc
+CCFLAGS_DEBUG   := -O$(OPT_DBG)             \
+                   -std=gnu23               \
+                   -Wall                    \
+                   -Wextra                  \
+                   -Wpadded                 \
+                   -pedantic                \
+                   -pedantic-errors         \
+                   -pipe                    \
+				   -pthread                 \
+                   -g3                      \
+                   -I$(SRCDIR)/inc
 
-CCFLAGS_RELEASE := -O$(OPT_REL)              \
-                    -std=c23                 \
-                    -Wall                    \
-                    -Wextra                  \
-                    -pedantic                \
-                    -pedantic-errors         \
-                    -pipe                    \
-					-pthread                 \
-                    -fno-pic                 \
-                    -I$(SRCDIR)/inc
+CCFLAGS_RELEASE := -O$(OPT_REL)             \
+                   -std=gnu23               \
+                   -Wall                    \
+                   -Wextra                  \
+                   -pedantic                \
+                   -pedantic-errors         \
+                   -pipe                    \
+				   -pthread                 \
+                   -I$(SRCDIR)/inc
 
-ASFLAGS          := -O0                      \
-                    -f elf64
+LDFLAGS_DEBUG   := -O$(OPT_DBG)
 
-LDFLAGS_DEBUG    := -O$(OPT_DBG)             \
-                    -fno-pie
-
-LDFLAGS_RELEASE  := -O$(OPT_REL)             \
-                    -fno-pie
+LDFLAGS_RELEASE := -O$(OPT_REL)
 
 
 
@@ -128,11 +119,6 @@ compile_and_link : $(OBJS)
 %.o : %.c
 	@printf "COMPILE: "
 	$(CC) $(CCFLAGS) -c $< -o $@
-
-# compile .asm:
-%.o : %.asm
-	@printf "COMPILE: "
-	$(AS) $(ASFLAGS) $<
 
 
 
