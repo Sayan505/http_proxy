@@ -15,7 +15,7 @@ OPT_REL := 2
 
 
 # output:
-BIN := proxy_server.elf64
+BIN := proxy_server
 
 # output dirs:
 BUILDDIR            := build
@@ -42,8 +42,7 @@ CCFLAGS_DEBUG   := -O$(OPT_DBG)             \
                    -pedantic-errors         \
                    -pipe                    \
 				   -pthread                 \
-                   -g3                      \
-                   -I$(SRCDIR)/inc
+                   -g3
 
 CCFLAGS_RELEASE := -O$(OPT_REL)             \
                    -std=gnu23               \
@@ -52,8 +51,7 @@ CCFLAGS_RELEASE := -O$(OPT_REL)             \
                    -pedantic                \
                    -pedantic-errors         \
                    -pipe                    \
-				   -pthread                 \
-                   -I$(SRCDIR)/inc
+				   -pthread
 
 LDFLAGS_DEBUG   := -O$(OPT_DBG)
 
@@ -87,7 +85,7 @@ release : dirs_release setvars_release compile_and_link
 	@printf "\nRELEASE: DONE!\n\n"
 
 
-# mkdirs:
+# make build dirs:
 dirs_debug:
 	@mkdir -p $(BUILDDIR)
 		@mkdir -p $(BUILDDIR_DEBUGDIR)
@@ -97,7 +95,7 @@ dirs_release:
 		@mkdir -p $(BUILDDIR_RELEASEDIR)
 
 
-# set vars:
+# set build vars:
 setvars_debug:
 	$(eval CCFLAGS = $(CCFLAGS_DEBUG))
 	$(eval LDFLAGS  = $(LDFLAGS_DEBUG))
@@ -109,7 +107,7 @@ setvars_release:
 	$(eval BUILD_OUTPUT_DIR = $(BUILDDIR_RELEASEDIR))
 
 
-# invoke compiling templates and link the bin:
+# invoke the .c compiling template and link the bin:
 compile_and_link : $(OBJS)
 	@printf "LINK: "
 	$(LD) $(LDFLAGS) $^ -o $(BUILD_OUTPUT_DIR)/$(BIN)
