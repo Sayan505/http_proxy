@@ -1,6 +1,9 @@
 #include "server.h"
 
 
+sem_t semaphore;    // access control for clients
+
+
 void handle_http_get_req(int client_socket_fd, char* client_req, ssize_t client_req_nbytes) {
     ssize_t bytes_transmitted = client_req_nbytes;
 
@@ -98,7 +101,17 @@ void handle_http_get_req(int client_socket_fd, char* client_req, ssize_t client_
     free(target_res_buffer);
 }
 
-void client_handler(int client_socket_fd) {
+void* client_handler(void* __client_socket_fd) {
+    sem_wait(&semaphore);
+    
+    int sval;
+    sem_getvalue(&semaphore, &sval);
+    printf("SEMAPHORE VALUE: %d\n", sval);
+
+
+    int client_socket_fd = *(int*)__client_socket_fd;
+
+
     // alloc buffer to receive client's req
     char* client_req_buffer = malloc(MAX_BUFF_SZ);
     memset(client_req_buffer, 0, MAX_BUFF_SZ);
@@ -120,12 +133,29 @@ void client_handler(int client_socket_fd) {
     }
 
 
+    // close client socket after transmission
+    close(client_socket_fd);
+
     // free up client req buffer
     free(client_req_buffer);
+
+
+    sem_post(&semaphore);
+
+
+    return NULL;
 }
 
 
 int main() {
+    pthread_t threadpool[MAX_CLIENTS];  // thread pool for each client conn
+    int pth_i = 0;                      // threadpool iterator
+
+
+    // init the semaphore with MAX_CLIENTS number of allowed acquisitions
+    sem_init(&semaphore, 0, (unsigned int)MAX_CLIENTS);
+
+
     // create new socket for server
     int server_socket_fd = socket(AF_INET, SOCK_STREAM, 0);
     if(server_socket_fd == -1) {
@@ -173,16 +203,15 @@ int main() {
 
         // serve client
         printf("OK: connection accepted from [%s]\n", inet_ntoa(client_sock_addr.sin_addr));
-        client_handler(client_socket_fd);
-
-
-        // clean up client side
-        close(client_socket_fd);
+        pthread_create(&threadpool[pth_i++], NULL, client_handler, &client_socket_fd);
     }
 
 
-    // clean up server side
+    // close server socket
     close(server_socket_fd);
+
+    // free the semaphore
+    sem_destroy(&semaphore);
 
     return 0;
 }
