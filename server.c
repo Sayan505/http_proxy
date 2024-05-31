@@ -2,6 +2,9 @@
 
 
 void handle_http_get_req(int client_socket_fd, char* client_req, ssize_t client_req_nbytes) {
+    ssize_t bytes_transmitted = client_req_nbytes;
+
+
     // parse client's req for the "Host:" field
     char* client_req_host_base   = strstr(client_req, "Host:") + 6;
     int   client_req_host_nbytes = strstr(client_req_host_base, "\r\n") - client_req_host_base;
@@ -62,17 +65,34 @@ void handle_http_get_req(int client_socket_fd, char* client_req, ssize_t client_
 
 
     // forward client's req to the target
-    send(target_socket_fd, client_req, client_req_nbytes, 0);
+    ssize_t n;
+    if((n = send(target_socket_fd, client_req, client_req_nbytes, 0)) == -1) {
+        printf("    ERR: transmission failure\n");
+        close(target_socket_fd);
+        free(target_res_buffer);
+        return;
+    }
+    bytes_transmitted += n;
 
 
-    int nbytes;  // recv n bytes from target
+    ssize_t nbytes;  // recv n bytes from target
     while((nbytes = recv(target_socket_fd, target_res_buffer, MAX_BUFF_SZ, 0)) > 0) {
-        send(client_socket_fd, target_res_buffer, nbytes, 0);  // send it to the client
+        // send it to the client
+        if((n = send(client_socket_fd, target_res_buffer, nbytes, 0)) == -1) {
+            printf("    ERR: transmission failure\n");
+            close(target_socket_fd);
+            free(target_res_buffer);
+            return;
+        }
         memset(target_res_buffer, 0, MAX_BUFF_SZ);             // reset buffer for next packet
+        
+        bytes_transmitted += (nbytes + n);
     }
 
     // close connection to target
     close(target_socket_fd);
+
+    printf("    OK: %ld bytes transmitted\n", bytes_transmitted);
 
     // free up response buffer
     free(target_res_buffer);
