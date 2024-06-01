@@ -8,12 +8,14 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <semaphore.h>
+#include <signal.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
 
 
+void  shutdown_handler(int signo);
 void* client_handler(void* __client_socket_fd);
 void  handle_http_get_req(int client_socket_fd, char* client_req_buffer, ssize_t client_req_nbytes);
 

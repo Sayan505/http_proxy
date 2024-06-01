@@ -1,7 +1,15 @@
 #include "server.h"
 
 
-sem_t semaphore;    // access control for clients
+// access control for clients
+sem_t semaphore;
+static volatile sig_atomic_t sigint_received = 0;
+
+void shutdown_handler(int signo) {
+    (void)signo;  // unused
+
+    sigint_received = 1;
+}
 
 
 void handle_http_get_req(int client_socket_fd, char* client_req, ssize_t client_req_nbytes) {
@@ -186,14 +194,20 @@ int main(void) {
     printf("OK: server is listening for incoming connections @ port %d\n", SRV_PORT);
 
 
-    // keep trying to accept incoming connections
-    while(1) {
+    // rig shutdown handler for a graceful shutdown on CTRL+C
+    struct sigaction shutdown_action;
+    shutdown_action.sa_flags   = SA_INTERRUPT;
+    shutdown_action.sa_handler = shutdown_handler;
+    sigaction(SIGINT, &shutdown_action, NULL);
+
+
+    // keep trying to accept incoming connections until SIGINT
+    while(!sigint_received) {
         struct sockaddr_in client_sock_addr;
         socklen_t c = sizeof(client_sock_addr);
 
         int client_socket_fd = accept(server_socket_fd, (struct sockaddr*)&client_sock_addr, &c);
         if(client_socket_fd == -1) {
-            printf("ERR: failed to accept an incoming connection\n");
             continue;  // try for next req on failure
         }
 
@@ -203,6 +217,9 @@ int main(void) {
         pthread_t dummy_tid;
         pthread_create(&dummy_tid, NULL, client_handler, &client_socket_fd);
     }
+
+
+    printf("[SHUTDOWN]\n");
 
 
     // close server socket
