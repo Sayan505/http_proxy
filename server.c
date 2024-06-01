@@ -15,7 +15,7 @@ void handle_http_get_req(int client_socket_fd, char* client_req, ssize_t client_
     memset(client_req_host, 0, client_req_host_nbytes + 1);
     strncpy(client_req_host, client_req_host_base, client_req_host_nbytes);
 
-    printf("    url:    [%s]\n", client_req_host);
+    printf("    url:    [%s]\t(%d)\n", client_req_host, client_socket_fd);
 
 
     // get target host addr from name
@@ -28,7 +28,7 @@ void handle_http_get_req(int client_socket_fd, char* client_req, ssize_t client_
     struct addrinfo* target_host_addrinfo = NULL;
 
     if(getaddrinfo(client_req_host, NULL, &hints, &target_host_addrinfo) != 0) {
-        printf("ERR: failed to lookup target host\n");
+        printf("ERR: failed to lookup target host\t(%d)\n", client_socket_fd);
         free(client_req_host);
         return;
     }
@@ -40,7 +40,7 @@ void handle_http_get_req(int client_socket_fd, char* client_req, ssize_t client_
     // create socket for the target connection
     int target_socket_fd = socket(AF_INET, SOCK_STREAM, 0);
     if(target_socket_fd == -1) {
-        printf("ERR: failed to create target socket\n");
+        printf("ERR: failed to create target socket\t(%d)\n", client_socket_fd);
         return;
     }
 
@@ -53,10 +53,11 @@ void handle_http_get_req(int client_socket_fd, char* client_req, ssize_t client_
 
     // connect to target
     if(connect(target_socket_fd, (struct sockaddr*)&target_socket_addr, sizeof(target_socket_addr)) == -1) {
-        printf("    ERR: failed to connect to target\n");
+        printf("    ERR: failed to connect to target\t(%d)\n", client_socket_fd);
         return;
     } else {
-        printf("    OK: connected to the target @ [%s]\n", inet_ntoa(((struct sockaddr_in*)target_host_addrinfo->ai_addr)->sin_addr));
+        printf("    OK: connected to the target @ [%s]\t(%d)\n",
+            inet_ntoa(((struct sockaddr_in*)target_host_addrinfo->ai_addr)->sin_addr), client_socket_fd);
     }
 
     freeaddrinfo(target_host_addrinfo);
@@ -70,7 +71,7 @@ void handle_http_get_req(int client_socket_fd, char* client_req, ssize_t client_
     // forward client's req to the target
     ssize_t n;
     if((n = send(target_socket_fd, client_req, client_req_nbytes, 0)) == -1) {
-        printf("    ERR: transmission failure\n");
+        printf("    ERR: transmission failure\t(%d)\n", client_socket_fd);
         close(target_socket_fd);
         free(target_res_buffer);
         return;
@@ -82,7 +83,7 @@ void handle_http_get_req(int client_socket_fd, char* client_req, ssize_t client_
     while((nbytes = recv(target_socket_fd, target_res_buffer, MAX_BUFF_SZ, 0)) > 0) {
         // send it to the client
         if((n = send(client_socket_fd, target_res_buffer, nbytes, 0)) == -1) {
-            printf("    ERR: transmission failure\n");
+            printf("    ERR: transmission failure\t(%d)\n", client_socket_fd);
             close(target_socket_fd);
             free(target_res_buffer);
             return;
@@ -95,7 +96,7 @@ void handle_http_get_req(int client_socket_fd, char* client_req, ssize_t client_
     // close connection to target
     close(target_socket_fd);
 
-    printf("    OK: %ld bytes transmitted\n", bytes_transmitted);
+    printf("    OK: %ld bytes transmitted\t(%d)\n", bytes_transmitted, client_socket_fd);
 
     // free up response buffer
     free(target_res_buffer);
@@ -106,7 +107,7 @@ void* client_handler(void* __client_socket_fd) {
     
     int sval;
     sem_getvalue(&semaphore, &sval);
-    printf("SEMAPHORE VALUE: %d\n", sval);
+    printf("!number of clients: [%d/%d]\n", MAX_CLIENTS - sval, MAX_CLIENTS);
 
 
     int client_socket_fd = *(int*)__client_socket_fd;
@@ -124,10 +125,10 @@ void* client_handler(void* __client_socket_fd) {
     // parse client's req to find the HTTP Method
     if(strncmp(client_req_buffer, "GET", 3) == 0) {
         // HTTP GET Method
-        printf("    method: [GET]\n");
+        printf("    method: [GET]\t(%d)\n", client_socket_fd);
         handle_http_get_req(client_socket_fd, client_req_buffer, client_req_nbytes);
     }else {
-        printf("    ERR: unsupported method\n");
+        printf("    ERR: unsupported method\t(%d)\n", client_socket_fd);
         const char* msg = "HTTP/1.1 501 Not Implemented\r\nContent-Length: 41\r\nContent-Type: text/html\r\n\r\n<html><h1>501 Not Implemented</h1></html>";
         send(client_socket_fd, msg, strlen(msg), 0);
     }
@@ -147,11 +148,7 @@ void* client_handler(void* __client_socket_fd) {
 }
 
 
-int main() {
-    pthread_t threadpool[MAX_CLIENTS];  // thread pool for each client conn
-    int pth_i = 0;                      // threadpool iterator
-
-
+int main(void) {
     // init the semaphore with MAX_CLIENTS number of allowed acquisitions
     sem_init(&semaphore, 0, (unsigned int)MAX_CLIENTS);
 
@@ -202,8 +199,9 @@ int main() {
 
 
         // serve client
-        printf("OK: connection accepted from [%s]\n", inet_ntoa(client_sock_addr.sin_addr));
-        pthread_create(&threadpool[pth_i++], NULL, client_handler, &client_socket_fd);
+        printf("OK: connection accepted from [%s]\t(%d)\n", inet_ntoa(client_sock_addr.sin_addr), client_socket_fd);
+        pthread_t dummy_tid;
+        pthread_create(&dummy_tid, NULL, client_handler, &client_socket_fd);
     }
 
 
