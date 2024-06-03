@@ -15,12 +15,16 @@
 #include <netdb.h>
 
 
+#include "lru_cache.h"
+
+
 void  shutdown_handler(int signo);
 void* client_handler(void* __client_socket_fd);
 void  handle_http_get_req(int client_socket_fd, char* client_req_buffer, ssize_t client_req_nbytes);
 
 
-#define SRV_PORT    ((short)(5555))
-#define MAX_CLIENTS ((int)(64))
-#define MAX_BUFF_SZ ((size_t)(4096))
+#define SRV_PORT        ((short)(5555))
+#define MAX_CLIENTS     ((int)(255))
+#define MAX_REQ_BUFF_SZ ((int)(4096))
+#define MAX_RES_BUFF_SZ ((int)(4096))
 

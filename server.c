@@ -1,12 +1,15 @@
 #include "server.h"
 
 
+// default: cache on
+static volatile int usecache = 1;    // turn off cache: proxy_server -nocache
+
 // access control for clients
 sem_t semaphore;
 static volatile sig_atomic_t sigint_received = 0;
 
 void shutdown_handler(int signo) {
-    (void)signo;  // unused
+    (void)signo;  // discard
 
     sigint_received = 1;
 }
@@ -72,8 +75,17 @@ void handle_http_get_req(int client_socket_fd, char* client_req, ssize_t client_
 
 
     // alloc response buffer
-    char* target_res_buffer = malloc(MAX_BUFF_SZ);
-    memset(target_res_buffer, 0, MAX_BUFF_SZ);
+    char* target_res_buffer = malloc(MAX_RES_BUFF_SZ);
+    memset(target_res_buffer, 0, MAX_RES_BUFF_SZ);
+
+
+    // alloc cache buffer if allowed
+    int   discard_cache_buffer = 0;  // discard caching if the response is > MAX_CACHE_RES_SIZE
+    char* cache_buffer = NULL;
+    if(usecache) {
+        cache_buffer = malloc(MAX_CACHE_RES_SIZE);
+        memset(cache_buffer, 0, MAX_CACHE_RES_SIZE);
+    }
 
 
     // forward client's req to the target
@@ -87,8 +99,9 @@ void handle_http_get_req(int client_socket_fd, char* client_req, ssize_t client_
     bytes_transmitted += n;
 
 
-    ssize_t nbytes;  // recv n bytes from target
-    while((nbytes = recv(target_socket_fd, target_res_buffer, MAX_BUFF_SZ, 0)) > 0) {
+    ssize_t cache_buffer_offset = 0;
+    ssize_t nbytes  = 0;  // num bytes received
+    while((nbytes = recv(target_socket_fd, target_res_buffer, MAX_RES_BUFF_SZ, 0)) > 0) {
         // send it to the client
         if((n = send(client_socket_fd, target_res_buffer, nbytes, 0)) == -1) {
             printf("    ERR: transmission failure\t(%d)\n", client_socket_fd);
@@ -96,8 +109,19 @@ void handle_http_get_req(int client_socket_fd, char* client_req, ssize_t client_
             free(target_res_buffer);
             return;
         }
-        memset(target_res_buffer, 0, MAX_BUFF_SZ);             // reset buffer for next packet
-        
+
+        // store the response in cache if within the size constraints
+        if((usecache) && (discard_cache_buffer == 0)) {
+            if((cache_buffer_offset + nbytes) <= MAX_CACHE_RES_SIZE) {
+                memcpy(cache_buffer + cache_buffer_offset, target_res_buffer, nbytes);
+                cache_buffer_offset += nbytes;
+            } else {
+                discard_cache_buffer = 1;
+            }
+        }
+
+        memset(target_res_buffer, 0, nbytes);  // reset target buffer for next chunk transmission
+
         bytes_transmitted += (nbytes + n);
     }
 
@@ -106,13 +130,28 @@ void handle_http_get_req(int client_socket_fd, char* client_req, ssize_t client_
 
     printf("    OK: %ld bytes transmitted\t(%d)\n", bytes_transmitted, client_socket_fd);
 
+
+    // attempt to cache the response
+    if(discard_cache_buffer == 0) {
+        // TODO
+        printf("    OK: cached the response\t(%d)\n", client_socket_fd);
+    } else {
+        printf("NOT CACHED!\n");
+        printf("    [response not cached]\t(%d)\n", client_socket_fd);
+    }
+
+    // free up the cache buffer if using it
+    if(usecache) {
+        free(cache_buffer);
+    }
+
     // free up response buffer
     free(target_res_buffer);
 }
 
 void* client_handler(void* __client_socket_fd) {
     sem_wait(&semaphore);
-    
+
     int sval;
     sem_getvalue(&semaphore, &sval);
     printf("!number of clients: [%d/%d]\n", MAX_CLIENTS - sval, MAX_CLIENTS);
@@ -122,12 +161,15 @@ void* client_handler(void* __client_socket_fd) {
 
 
     // alloc buffer to receive client's req
-    char* client_req_buffer = malloc(MAX_BUFF_SZ);
-    memset(client_req_buffer, 0, MAX_BUFF_SZ);
+    char* client_req_buffer = malloc(MAX_REQ_BUFF_SZ);
+    memset(client_req_buffer, 0, MAX_REQ_BUFF_SZ);
 
 
     // recv client's req
-    ssize_t client_req_nbytes = recv(client_socket_fd, client_req_buffer, MAX_BUFF_SZ, 0);
+    ssize_t client_req_nbytes = recv(client_socket_fd, client_req_buffer, MAX_REQ_BUFF_SZ, 0);
+
+
+    // TODO: parse client_req_buffer for the URL and try to refer to the cache and return
 
 
     // parse client's req to find the HTTP Method
@@ -156,7 +198,20 @@ void* client_handler(void* __client_socket_fd) {
 }
 
 
-int main(void) {
+int main(int argc, char** argv) {
+    if(argc > 1) {
+        if(strcmp(argv[0], "-nocache") == 0) {
+            usecache = 0;
+        }
+    }
+
+
+    if(usecache){
+        // config cache
+        //init_cache();
+    }
+
+
     // init the semaphore with MAX_CLIENTS number of allowed acquisitions
     sem_init(&semaphore, 0, (unsigned int)MAX_CLIENTS);
 
