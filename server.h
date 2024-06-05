@@ -20,7 +20,7 @@
 
 void  shutdown_handler(int signo);
 void* client_handler(void* __client_socket_fd);
-void  handle_http_get_req(int client_socket_fd, char* client_req_buffer, ssize_t client_req_nbytes);
+void  handle_http_get_req(int client_socket_fd, char* client_req_buffer, ssize_t client_req_nbytes, char* client_req_url);
 
 
 #define SRV_PORT        ((short)(5555))

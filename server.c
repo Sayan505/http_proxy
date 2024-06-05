@@ -6,6 +6,7 @@ static volatile int usecache = 1;    // turn off cache: proxy_server -nocache
 
 // access control for clients
 sem_t semaphore;
+pthread_mutex_t mutex;
 static volatile sig_atomic_t sigint_received = 0;
 
 void shutdown_handler(int signo) {
@@ -15,7 +16,7 @@ void shutdown_handler(int signo) {
 }
 
 
-void handle_http_get_req(int client_socket_fd, char* client_req, ssize_t client_req_nbytes) {
+void handle_http_get_req(int client_socket_fd, char* client_req, ssize_t client_req_nbytes, char* client_req_url) {
     ssize_t bytes_transmitted = client_req_nbytes;
 
 
@@ -26,7 +27,7 @@ void handle_http_get_req(int client_socket_fd, char* client_req, ssize_t client_
     memset(client_req_host, 0, client_req_host_nbytes + 1);
     strncpy(client_req_host, client_req_host_base, client_req_host_nbytes);
 
-    printf("    url:    [%s]\t(%d)\n", client_req_host, client_socket_fd);
+    printf("    host:    [%s]\t(%d)\n", client_req_host, client_socket_fd);
 
 
     // get target host addr from name
@@ -68,7 +69,7 @@ void handle_http_get_req(int client_socket_fd, char* client_req, ssize_t client_
         return;
     } else {
         printf("    OK: connected to the target @ [%s]\t(%d)\n",
-            inet_ntoa(((struct sockaddr_in*)target_host_addrinfo->ai_addr)->sin_addr), client_socket_fd);
+        inet_ntoa(((struct sockaddr_in*)target_host_addrinfo->ai_addr)->sin_addr), client_socket_fd);
     }
 
     freeaddrinfo(target_host_addrinfo);
@@ -131,17 +132,19 @@ void handle_http_get_req(int client_socket_fd, char* client_req, ssize_t client_
     printf("    OK: %ld bytes transmitted\t(%d)\n", bytes_transmitted, client_socket_fd);
 
 
-    // attempt to cache the response
-    if(discard_cache_buffer == 0) {
-        // TODO
-        printf("    OK: cached the response\t(%d)\n", client_socket_fd);
-    } else {
-        printf("NOT CACHED!\n");
-        printf("    [response not cached]\t(%d)\n", client_socket_fd);
-    }
-
-    // free up the cache buffer if using it
     if(usecache) {
+        // attempt to cache the response
+        if(discard_cache_buffer == 0) {
+            pthread_mutex_lock(&mutex);
+            cache_store(client_req_url, cache_buffer, &cache_buffer_offset);
+            pthread_mutex_unlock(&mutex);
+
+            printf("    OK: cached the response [%ld bytes]\t(%d)\n", cache_buffer_offset, client_socket_fd);
+        } else {
+            printf("    [response not cached]\t(%d)\n", client_socket_fd);
+        }
+
+        // free up the cache buffer
         free(cache_buffer);
     }
 
@@ -169,16 +172,48 @@ void* client_handler(void* __client_socket_fd) {
     ssize_t client_req_nbytes = recv(client_socket_fd, client_req_buffer, MAX_REQ_BUFF_SZ, 0);
 
 
-    // TODO: parse client_req_buffer for the URL and try to refer to the cache and return
+    // parse client's req to find the http method
+    char* client_req_method_base   = client_req_buffer;
+    int   client_req_method_nbytes = strchr(client_req_method_base, ' ') - client_req_method_base;
+    char* client_req_method        = malloc(client_req_method_nbytes + 1);  // alloc mem to store the client's req method
+    memset(client_req_method, 0, client_req_method_nbytes + 1);
+    strncpy(client_req_method, client_req_method_base, client_req_method_nbytes);
+
+    // parse client's req to find the URL
+    char* client_req_url_base   = client_req_method_base + client_req_method_nbytes + 1;
+    int   client_req_url_nbytes = strchr(client_req_url_base, ' ') - client_req_url_base;
+
+    char* client_req_url        = malloc(client_req_url_nbytes + 1);  // alloc mem to store the client's req url
+    memset(client_req_url, 0, client_req_url_nbytes + 1);
+    strncpy(client_req_url, client_req_url_base, client_req_url_nbytes);
 
 
-    // parse client's req to find the HTTP Method
-    if(strncmp(client_req_buffer, "GET", 3) == 0) {
+    // handle client request
+    if(strcmp(client_req_method, "GET") == 0) {
         // HTTP GET Method
-        printf("    method: [GET]\t(%d)\n", client_socket_fd);
-        handle_http_get_req(client_socket_fd, client_req_buffer, client_req_nbytes);
-    }else {
-        printf("    ERR: unsupported method\t(%d)\n", client_socket_fd);
+        printf("    method: [%s]\t(%d)\n", client_req_method, client_socket_fd);
+
+        // try to refer to the cache if allowed
+        char*   cached_response        = NULL;
+        ssize_t cached_response_nbytes = 0;
+        if(usecache) {
+            pthread_mutex_lock(&mutex);
+            cached_response = cache_refer(client_req_url, &cached_response_nbytes);
+            pthread_mutex_unlock(&mutex);
+        }
+
+        // and return the cached result if cache is hit
+        if(cached_response) {
+            // return cached response
+            printf("    OK: retrieved response from cache [%ld bytes]\t(%d)\n", cached_response_nbytes, client_socket_fd);
+            ssize_t nbytes_sent_to_client = send(client_socket_fd, cached_response, cached_response_nbytes, 0);
+            printf("    OK: %ld bytes transmitted\t(%d)\n", client_req_nbytes + nbytes_sent_to_client, client_socket_fd);
+        } else {
+            // else fetch response from target server
+            handle_http_get_req(client_socket_fd, client_req_buffer, client_req_nbytes, client_req_url);
+        }
+    } else {
+        printf("    ERR: unsupported method [%s]\t(%d)\n", client_req_method, client_socket_fd);
         const char* msg = "HTTP/1.1 501 Not Implemented\r\nContent-Length: 41\r\nContent-Type: text/html\r\n\r\n<html><h1>501 Not Implemented</h1></html>";
         send(client_socket_fd, msg, strlen(msg), 0);
     }
@@ -187,8 +222,10 @@ void* client_handler(void* __client_socket_fd) {
     // close client socket after transmission
     close(client_socket_fd);
 
-    // free up client req buffer
+    // free up client req buffers
     free(client_req_buffer);
+    free(client_req_method);
+    free(client_req_url);
 
 
     sem_post(&semaphore);
@@ -203,12 +240,6 @@ int main(int argc, char** argv) {
         if(strcmp(argv[0], "-nocache") == 0) {
             usecache = 0;
         }
-    }
-
-
-    if(usecache){
-        // config cache
-        //init_cache();
     }
 
 
