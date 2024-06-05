@@ -192,6 +192,7 @@ void* client_handler(void* __client_socket_fd) {
     if(strcmp(client_req_method, "GET") == 0) {
         // HTTP GET Method
         printf("    method: [%s]\t(%d)\n", client_req_method, client_socket_fd);
+        printf("    url:    [%s]\t(%d)\n", client_req_url,    client_socket_fd);
 
         // try to refer to the cache if allowed
         char*   cached_response        = NULL;
