@@ -13,21 +13,22 @@ char* cache_refer(char* url, ssize_t* res_data_nbytes) {
         // check if url is already in cache
         if(strcmp(curr->url, url) == 0) {
             // if expired
-            if(time(NULL) - curr->timestamp >= CACHE_TTL_MS) {
+            if(time(NULL) - curr->timestamp >= CACHE_TTL_SEC) {
                 // delete the entry
-                curr->prev->next = curr->next;
-
+                if(curr->prev) { curr->prev->next = curr->next; }  // if not first entry
+                else { head = curr->next; }  // if first entry
                 free(curr->url);
                 free(curr->res_data);
                 free(curr);
-
                 --cache_size;
 
                 // and return NULL
                 return NULL;
             } else {
+                // else, not expired
+                // then, if not the first element
                 if(curr->prev) {
-                    // else shift the entry to the front (most recently used)
+                    // shift the entry to the front (most recently used)
                     curr->prev->next = curr->next;
                     curr->next = head;
                     curr->prev = NULL;
@@ -51,8 +52,30 @@ char* cache_refer(char* url, ssize_t* res_data_nbytes) {
     return NULL;
 }
 
-void cache_store(char* url, char* res_data, ssize_t* res_data_nbytes) {
-    // check if the cache is full
+int cache_upsert(char* url, char* res_data, ssize_t* res_data_nbytes) {
+    int updated = 0;  // set to 1 if 
+
+    // go thru the cache
+    struct cache_element* curr = head;
+    while(curr) {
+        // check if url is already in cache
+        if(strcmp(curr->url, url) == 0) {
+            // delete the duplicate entry
+            if(curr->prev) { curr->prev->next = curr->next; }  // if not first entry
+            else { head = curr->next; }  // if first entry
+            free(curr->url);
+            free(curr->res_data);
+            free(curr);
+            --cache_size;
+
+            updated = 1;
+        }
+
+        curr = curr->next;
+    }
+
+    // proceed to add the new/updated entry
+    // firstly, check if the cache is full before storing (useful when storing an unique entry)
     if(cache_size >= MAX_CACHE_SIZE) {
         // then delete the last element (least recently used)
         struct cache_element* curr = head;
@@ -77,11 +100,13 @@ void cache_store(char* url, char* res_data, ssize_t* res_data_nbytes) {
     
     // load the url
     e->url = malloc(strlen(url) + 1);
+    memset(e->url, 0, strlen(url) + 1);
     strcpy(e->url, url);
 
     // load the response
     e->res_data_nbytes = *res_data_nbytes;
     e->res_data        =  malloc(*res_data_nbytes);
+    memset(e->res_data, 0, (*res_data_nbytes) + 1);
     memcpy(e->res_data, res_data, *res_data_nbytes);
 
     // set the timestamp
@@ -93,5 +118,7 @@ void cache_store(char* url, char* res_data, ssize_t* res_data_nbytes) {
     head = e;
 
     ++cache_size;
+
+    return updated;
 }
 

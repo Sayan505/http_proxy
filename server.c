@@ -6,7 +6,7 @@ static volatile int usecache = 1;    // turn off cache: proxy_server -nocache
 
 // access control for clients
 sem_t semaphore;
-pthread_mutex_t mutex;
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 static volatile sig_atomic_t sigint_received = 0;
 
 void shutdown_handler(int signo) {
@@ -136,10 +136,14 @@ void handle_http_get_req(int client_socket_fd, char* client_req, ssize_t client_
         // attempt to cache the response
         if(discard_cache_buffer == 0) {
             pthread_mutex_lock(&mutex);
-            cache_store(client_req_url, cache_buffer, &cache_buffer_offset);
+            int updated = cache_upsert(client_req_url, cache_buffer, &cache_buffer_offset);  // cache_buffer_offset is the total response size in bytes
             pthread_mutex_unlock(&mutex);
 
-            printf("    OK: cached the response [%ld bytes]\t(%d)\n", cache_buffer_offset, client_socket_fd);
+            if(updated) {
+                printf("    OK: updated the cache [%ld bytes]\t(%d)\n", cache_buffer_offset, client_socket_fd);
+            } else {
+                printf("    OK: cached the response [%ld bytes]\t(%d)\n", cache_buffer_offset, client_socket_fd);
+            }
         } else {
             printf("    [response not cached]\t(%d)\n", client_socket_fd);
         }
@@ -179,10 +183,10 @@ void* client_handler(void* __client_socket_fd) {
     memset(client_req_method, 0, client_req_method_nbytes + 1);
     strncpy(client_req_method, client_req_method_base, client_req_method_nbytes);
 
+
     // parse client's req to find the URL
     char* client_req_url_base   = client_req_method_base + client_req_method_nbytes + 1;
     int   client_req_url_nbytes = strchr(client_req_url_base, ' ') - client_req_url_base;
-
     char* client_req_url        = malloc(client_req_url_nbytes + 1);  // alloc mem to store the client's req url
     memset(client_req_url, 0, client_req_url_nbytes + 1);
     strncpy(client_req_url, client_req_url_base, client_req_url_nbytes);
