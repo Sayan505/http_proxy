@@ -136,7 +136,7 @@ void handle_http_get_req(int client_socket_fd, char* client_req, ssize_t client_
         // attempt to cache the response
         if(discard_cache_buffer == 0) {
             pthread_mutex_lock(&mutex);
-            int updated = cache_upsert(client_req_url, cache_buffer, &cache_buffer_offset);  // cache_buffer_offset is the total response size in bytes
+            int updated = cache_upsert(client_req_url, cache_buffer, cache_buffer_offset);  // cache_buffer_offset is the total response size in bytes
             pthread_mutex_unlock(&mutex);
 
             if(updated) {

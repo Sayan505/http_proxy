@@ -52,7 +52,7 @@ char* cache_refer(char* url, ssize_t* res_data_nbytes) {
     return NULL;
 }
 
-int cache_upsert(char* url, char* res_data, ssize_t* res_data_nbytes) {
+int cache_upsert(char* url, char* res_data, ssize_t res_data_nbytes) {
     int updated = 0;  // set to 1 if 
 
     // go thru the cache
@@ -104,10 +104,10 @@ int cache_upsert(char* url, char* res_data, ssize_t* res_data_nbytes) {
     strcpy(e->url, url);
 
     // load the response
-    e->res_data_nbytes = *res_data_nbytes;
-    e->res_data        =  malloc(*res_data_nbytes);
-    memset(e->res_data, 0, (*res_data_nbytes) + 1);
-    memcpy(e->res_data, res_data, *res_data_nbytes);
+    e->res_data_nbytes = res_data_nbytes;
+    e->res_data        =  malloc(res_data_nbytes);
+    memset(e->res_data, 0, res_data_nbytes);
+    memcpy(e->res_data, res_data, res_data_nbytes);
 
     // set the timestamp
     e->timestamp = time(NULL);
