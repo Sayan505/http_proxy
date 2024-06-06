@@ -49,6 +49,7 @@ CCFLAGS_RELEASE := -O$(OPT_REL)             \
                    -std=gnu23               \
                    -Wall                    \
                    -Wextra                  \
+                   -Wpadded                 \
                    -pedantic                \
                    -pedantic-errors         \
                    -pipe                    \
