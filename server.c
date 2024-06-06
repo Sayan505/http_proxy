@@ -262,7 +262,7 @@ void* client_handler(void* __client_socket_fd) {
 
 int main(int argc, char** argv) {
     if(argc > 1) {
-        if(strcmp(argv[0], "-nocache") == 0) {
+        if(strcmp(argv[1], "-nocache") == 0) {
             usecache = 0;
         }
     }
