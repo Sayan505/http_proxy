@@ -174,6 +174,19 @@ void* client_handler(void* __client_socket_fd) {
 
     // recv client's req
     ssize_t client_req_nbytes = recv(client_socket_fd, client_req_buffer, MAX_REQ_BUFF_SZ, 0);
+    if(client_req_nbytes <= 0) {
+        printf("    [client transmitted 0 bytes]\t(%d)\n", client_socket_fd);
+        const char* msg = "HTTP/1.1 400 Bad Request\r\nContent-Length: 37\r\nContent-Type: text/html\r\n\r\n<html><h1>400 Bad Request</h1></html>";
+        send(client_socket_fd, msg, strlen(msg), 0);
+
+        shutdown(client_socket_fd, SHUT_RDWR);
+        close(client_socket_fd);
+        free(client_req_buffer);
+
+        sem_post(&semaphore);
+
+        return NULL;
+    }
 
 
     // parse client's req to find the http method
@@ -225,6 +238,7 @@ void* client_handler(void* __client_socket_fd) {
 
 
     // close client socket after transmission
+    shutdown(client_socket_fd, SHUT_RDWR);
     close(client_socket_fd);
 
     // free up client req buffers
