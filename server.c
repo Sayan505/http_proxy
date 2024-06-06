@@ -157,14 +157,14 @@ void handle_http_get_req(int client_socket_fd, char* client_req, ssize_t client_
 }
 
 void* client_handler(void* __client_socket_fd) {
+    int client_socket_fd = *(int*)__client_socket_fd;
+
+
     sem_wait(&semaphore);
 
     int sval;
     sem_getvalue(&semaphore, &sval);
     printf("!number of clients: [%d/%d]\n", MAX_CLIENTS - sval, MAX_CLIENTS);
-
-
-    int client_socket_fd = *(int*)__client_socket_fd;
 
 
     // alloc buffer to receive client's req
@@ -184,6 +184,8 @@ void* client_handler(void* __client_socket_fd) {
         free(client_req_buffer);
 
         sem_post(&semaphore);
+
+        pthread_detach(pthread_self());
 
         return NULL;
     }
@@ -249,6 +251,10 @@ void* client_handler(void* __client_socket_fd) {
 
     sem_post(&semaphore);
 
+
+    // client connection threads will never be joined with main
+    // release thread resources on exit
+    pthread_detach(pthread_self());
 
     return NULL;
 }
