@@ -326,12 +326,16 @@ int main(int argc, char** argv) {
 
     printf("[SHUTDOWN]\n");
 
-
     // close server socket
     close(server_socket_fd);
 
     // free the semaphore
     sem_destroy(&semaphore);
+
+    // purge the cache
+    if(usecache) {
+        cache_destroy();
+    }
 
     return 0;
 }

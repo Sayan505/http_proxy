@@ -26,4 +26,5 @@ struct cache_element {
 
 char* cache_refer(char* url, ssize_t* res_data_nbytes);
 int   cache_upsert(char* url, char* res_data, ssize_t res_data_nbytes);
+void  cache_destroy(void);
 

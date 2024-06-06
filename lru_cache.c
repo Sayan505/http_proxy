@@ -122,3 +122,16 @@ int cache_upsert(char* url, char* res_data, ssize_t res_data_nbytes) {
     return updated;
 }
 
+void cache_destroy(void) {
+    struct cache_element* curr = head;
+    while(curr) {
+        struct cache_element* next = curr->next;
+
+        free(curr->url);
+        free(curr->res_data);
+        free(curr);
+
+        curr = next;
+    }
+}
+
