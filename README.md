@@ -9,5 +9,5 @@
 ## Deployment:
 - compile: `make release`
 - run: `./build/release/proxy_server`&nbsp;&nbsp;&nbsp;&nbsp;`# -nocache: disable cache`
-- config. browser proxy setting to `HTTP://127.0.0.1:5000` on the client side.
+- config. browser proxy setting to `HTTP://127.0.0.1:5555` on the client side.
 
